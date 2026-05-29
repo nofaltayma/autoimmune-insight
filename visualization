@@ -1,0 +1,182 @@
+"""
+AutoImmune Insight — Analysis & Visualizations
+Google Data Analytics Capstone | Tayma Nofal
+"""
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import seaborn as sns
+from scipy import stats
+import os
+import warnings
+warnings.filterwarnings('ignore')
+
+# ── Style ──────────────────────────────────────────────────────────────────
+plt.rcParams['figure.figsize'] = (12, 6)
+sns.set_style('whitegrid')
+PALETTE = ['#1A5276', '#2980B9', '#5DADE2', '#AED6F1', '#D6EAF8']
+
+os.makedirs('visuals', exist_ok=True)
+
+# ── Simulate dataset ───────────────────────────────────────────────────────
+np.random.seed(42)
+n = 500
+diseases = [
+    'Lupus', 'Rheumatoid Arthritis', 'Multiple Sclerosis',
+    "Hashimoto's", "Crohn's Disease", 'Celiac Disease',
+    'Type 1 Diabetes', 'Psoriasis'
+]
+
+df = pd.DataFrame({
+    'patient_id':               range(1, n+1),
+    'age':                      np.random.randint(18, 70, n),
+    'gender':                   np.random.choice(['Female', 'Male', 'Non-binary'], n, p=[0.72, 0.26, 0.02]),
+    'ethnicity':                np.random.choice(['White', 'Black', 'Hispanic', 'Asian', 'Other'], n, p=[0.55, 0.18, 0.15, 0.08, 0.04]),
+    'disease':                  np.random.choice(diseases, n),
+    'symptom_onset_age':        np.random.randint(15, 55, n),
+    'diagnosis_age':            np.random.randint(20, 65, n),
+    'fatigue':                  np.random.choice([0, 1], n, p=[0.3, 0.7]),
+    'joint_pain':               np.random.choice([0, 1], n, p=[0.4, 0.6]),
+    'brain_fog':                np.random.choice([0, 1], n, p=[0.45, 0.55]),
+    'skin_changes':             np.random.choice([0, 1], n, p=[0.55, 0.45]),
+    'gi_issues':                np.random.choice([0, 1], n, p=[0.5, 0.5]),
+    'has_insurance':            np.random.choice([0, 1], n, p=[0.2, 0.8]),
+    'saw_specialist':           np.random.choice([0, 1], n, p=[0.3, 0.7]),
+    'qol_score':                np.random.randint(20, 100, n),
+    'anti_inflammatory_diet':   np.random.choice([0, 1], n, p=[0.6, 0.4]),
+    'regular_exercise':         np.random.choice([0, 1], n, p=[0.5, 0.5]),
+    'sleep_quality':            np.random.choice(['Poor', 'Fair', 'Good'], n, p=[0.35, 0.35, 0.30]),
+    'stress_management':        np.random.choice([0, 1], n, p=[0.55, 0.45]),
+})
+
+df['diagnosis_delay_years'] = (df['diagnosis_age'] - df['symptom_onset_age']).clip(lower=1)
+df['symptom_burden'] = df[['fatigue', 'joint_pain', 'brain_fog', 'skin_changes', 'gi_issues']].sum(axis=1)
+df['lifestyle_score'] = (
+    df['anti_inflammatory_diet'] +
+    df['regular_exercise'] +
+    df['stress_management'] +
+    (df['sleep_quality'] == 'Good').astype(int)
+)
+
+print(f"Dataset ready: {df.shape[0]} patients, {df.shape[1]} features")
+
+# ── Chart 1: Symptom Frequency ─────────────────────────────────────────────
+symptom_cols   = ['fatigue', 'joint_pain', 'brain_fog', 'skin_changes', 'gi_issues']
+symptom_labels = ['Fatigue', 'Joint Pain', 'Brain Fog', 'Skin Changes', 'GI Issues']
+symptom_pct    = df[symptom_cols].mean() * 100
+
+fig, ax = plt.subplots(figsize=(10, 5))
+bars = ax.barh(symptom_labels, symptom_pct, color=PALETTE[0], edgecolor='white', height=0.5)
+ax.set_xlabel('% of Patients Reporting Symptom', fontsize=12)
+ax.set_title('Most Common Pre-Diagnosis Symptoms in Autoimmune Patients',
+             fontsize=14, fontweight='bold', pad=15)
+ax.set_xlim(0, 100)
+for bar, val in zip(bars, symptom_pct):
+    ax.text(val + 1, bar.get_y() + bar.get_height() / 2,
+            f'{val:.1f}%', va='center', fontsize=11)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.savefig('visuals/symptom_frequency.png', dpi=150, bbox_inches='tight')
+plt.show()
+print("Saved: visuals/symptom_frequency.png")
+
+# ── Chart 2: Diagnosis Delay by Disease ───────────────────────────────────
+delay_by_disease = df.groupby('disease')['diagnosis_delay_years'].mean().sort_values(ascending=False)
+
+fig, ax = plt.subplots(figsize=(11, 5))
+bars = ax.bar(delay_by_disease.index, delay_by_disease.values,
+              color=PALETTE[1], edgecolor='white')
+ax.axhline(delay_by_disease.mean(), color='#E74C3C', linestyle='--',
+           linewidth=1.5, label=f'Average: {delay_by_disease.mean():.1f} years')
+ax.set_ylabel('Average Diagnosis Delay (Years)', fontsize=12)
+ax.set_title('Average Diagnosis Delay by Autoimmune Disease',
+             fontsize=14, fontweight='bold', pad=15)
+ax.legend(fontsize=11)
+plt.xticks(rotation=25, ha='right')
+for bar, val in zip(bars, delay_by_disease.values):
+    ax.text(bar.get_x() + bar.get_width() / 2, val + 0.1,
+            f'{val:.1f}y', ha='center', fontsize=10)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+plt.savefig('visuals/diagnosis_delay_by_disease.png', dpi=150, bbox_inches='tight')
+plt.show()
+print("Saved: visuals/diagnosis_delay_by_disease.png")
+
+# ── Chart 3: Diagnosis Delay by Demographics ──────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+delay_gender = df.groupby('gender')['diagnosis_delay_years'].mean().sort_values(ascending=False)
+axes[0].bar(delay_gender.index, delay_gender.values,
+            color=[PALETTE[0], PALETTE[2], PALETTE[3]])
+axes[0].set_title('Diagnosis Delay by Gender', fontsize=13, fontweight='bold')
+axes[0].set_ylabel('Avg. Delay (Years)')
+for i, (label, val) in enumerate(delay_gender.items()):
+    axes[0].text(i, val + 0.1, f'{val:.1f}y', ha='center', fontsize=11)
+axes[0].spines['top'].set_visible(False)
+axes[0].spines['right'].set_visible(False)
+
+delay_eth = df.groupby('ethnicity')['diagnosis_delay_years'].mean().sort_values(ascending=False)
+axes[1].bar(delay_eth.index, delay_eth.values, color=PALETTE)
+axes[1].set_title('Diagnosis Delay by Ethnicity', fontsize=13, fontweight='bold')
+axes[1].set_ylabel('Avg. Delay (Years)')
+plt.sca(axes[1])
+plt.xticks(rotation=15)
+for i, (label, val) in enumerate(delay_eth.items()):
+    axes[1].text(i, val + 0.1, f'{val:.1f}y', ha='center', fontsize=11)
+axes[1].spines['top'].set_visible(False)
+axes[1].spines['right'].set_visible(False)
+
+plt.suptitle('Diagnostic Disparities in Autoimmune Disease',
+             fontsize=14, fontweight='bold', y=1.02)
+plt.tight_layout()
+plt.savefig('visuals/diagnosis_delay_demographics.png', dpi=150, bbox_inches='tight')
+plt.show()
+print("Saved: visuals/diagnosis_delay_demographics.png")
+
+# ── Chart 4: Lifestyle vs Quality of Life ─────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+axes[0].scatter(df['lifestyle_score'], df['qol_score'],
+                alpha=0.4, color=PALETTE[0], edgecolors='none')
+m, b, r, p, _ = stats.linregress(df['lifestyle_score'], df['qol_score'])
+x_line = np.linspace(0, 4, 100)
+axes[0].plot(x_line, m * x_line + b, color='#E74C3C',
+             linewidth=2, label=f'r = {r:.2f}, p = {p:.3f}')
+axes[0].set_xlabel('Lifestyle Score (0–4)', fontsize=12)
+axes[0].set_ylabel('Quality of Life Score (0–100)', fontsize=12)
+axes[0].set_title('Lifestyle Habits vs Quality of Life', fontsize=13, fontweight='bold')
+axes[0].legend(fontsize=11)
+axes[0].spines['top'].set_visible(False)
+axes[0].spines['right'].set_visible(False)
+
+lifestyle_factors = {
+    'Anti-inflam. Diet': df.groupby('anti_inflammatory_diet')['qol_score'].mean(),
+    'Regular Exercise':  df.groupby('regular_exercise')['qol_score'].mean(),
+    'Stress Mgmt':       df.groupby('stress_management')['qol_score'].mean(),
+}
+improvements = {k: v[1] - v[0] for k, v in lifestyle_factors.items()}
+axes[1].bar(improvements.keys(), improvements.values(),
+            color=PALETTE[1], edgecolor='white')
+axes[1].set_ylabel('QoL Score Improvement (points)', fontsize=12)
+axes[1].set_title('QoL Improvement by Lifestyle Factor', fontsize=13, fontweight='bold')
+for i, (k, v) in enumerate(improvements.items()):
+    axes[1].text(i, v + 0.3, f'+{v:.1f}', ha='center', fontsize=11,
+                 color='#1A5276', fontweight='bold')
+axes[1].spines['top'].set_visible(False)
+axes[1].spines['right'].set_visible(False)
+
+plt.tight_layout()
+plt.savefig('visuals/lifestyle_outcomes.png', dpi=150, bbox_inches='tight')
+plt.show()
+print("Saved: visuals/lifestyle_outcomes.png")
+
+# ── Summary ────────────────────────────────────────────────────────────────
+print("\n=== KEY FINDINGS ===")
+print(f"Average diagnosis delay:         {df['diagnosis_delay_years'].mean():.1f} years")
+print(f"Most delayed disease:            {delay_by_disease.index[0]} ({delay_by_disease.iloc[0]:.1f} years)")
+print(f"Most common symptom:             {symptom_labels[symptom_pct.values.argmax()]} ({symptom_pct.max():.1f}%)")
+print(f"Lifestyle-QoL correlation (r):   {r:.2f}")
+print(f"\nAll charts saved to /visuals/") 
